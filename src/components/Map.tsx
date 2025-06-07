@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, Libraries } from '@react-google-maps/api';
-import { Button, Box, CircularProgress, TextField } from '@mui/material';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
@@ -161,14 +160,12 @@ export default function Map() {
 
   if (!isLoaded) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
-        <CircularProgress />
-      </Box>
+      <div className="flex justify-center items-center h-[400px]">Loading...</div>
     );
   }
 
   return (
-    <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    <div className="w-full h-full flex flex-col items-center">
       <GoogleMap
         mapContainerStyle={containerStyle}
         center={center}
@@ -188,25 +185,26 @@ export default function Map() {
       </GoogleMap>
 
       {pins.map((pin, index) => (
-        <TextField
+        <input
           key={index}
-          label={`Names for Station ${index + 1}`}
+          type="text"
+          className="mt-2 w-full border rounded p-2"
+          placeholder={`Names for Station ${index + 1}`}
           value={pin.names.join(', ')}
           onChange={(e) => updatePinNames(index, e.target.value)}
-          sx={{ mt: 2, width: '100%' }}
         />
       ))}
 
       {user && (
-        <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-          <Button variant="contained" onClick={savePins}>
+        <div className="flex gap-2 mt-2">
+          <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={savePins}>
             Save Map
-          </Button>
-          <Button variant="contained" onClick={exportDistances}>
+          </button>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={exportDistances}>
             Export to .XLSX
-          </Button>
-        </Box>
+          </button>
+        </div>
       )}
-    </Box>
+    </div>
   );
 } 

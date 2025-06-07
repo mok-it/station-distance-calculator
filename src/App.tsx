@@ -1,4 +1,3 @@
-import { Box, Button, Container, Typography } from '@mui/material';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Map from './components/Map';
 
@@ -6,35 +5,29 @@ function AppContent() {
   const { user, loading, signIn, signOut } = useAuth();
 
   if (loading) {
-    return <Typography>Loading...</Typography>;
+    return <p>Loading...</p>;
   }
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ my: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-          <Typography variant="h4" component="h1">
-            Station Map
-          </Typography>
-          {user ? (
-            <Button variant="contained" onClick={signOut}>
-              Sign Out
-            </Button>
-          ) : (
-            <Button variant="contained" onClick={signIn}>
-              Sign In with Google
-            </Button>
-          )}
-        </Box>
+    <div className="max-w-5xl mx-auto my-4 p-4">
+      <div className="flex justify-between mb-4">
+        <h1 className="text-2xl font-bold">Station Map</h1>
         {user ? (
-          <Map />
+          <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={signOut}>
+            Sign Out
+          </button>
         ) : (
-          <Typography>
-            Please sign in to create and save your station maps.
-          </Typography>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={signIn}>
+            Sign In with Google
+          </button>
         )}
-      </Box>
-    </Container>
+      </div>
+      {user ? (
+        <Map />
+      ) : (
+        <p>Please sign in to create and save your station maps.</p>
+      )}
+    </div>
   );
 }
 
