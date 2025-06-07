@@ -41,7 +41,6 @@ const libraries: Libraries = ['places'];
 export default function Map() {
   const { user } = useAuth();
   const [pins, setPins] = useState<Pin[]>([]);
-  const [map, setMap] = useState<google.maps.Map | null>(null);
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
@@ -49,12 +48,12 @@ export default function Map() {
     libraries
   });
 
-  const onLoad = useCallback((map: google.maps.Map) => {
-    setMap(map);
+  const onLoad = useCallback(() => {
+    // No-op: we don't store the map instance
   }, []);
 
   const onUnmount = useCallback(() => {
-    setMap(null);
+    // No-op on unmount
   }, []);
 
   const handleMapClick = async (e: google.maps.MapMouseEvent) => {
