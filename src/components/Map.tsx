@@ -1,7 +1,7 @@
-import {useCallback, useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {GoogleMap, Libraries, Marker, useJsApiLoader,} from '@react-google-maps/api';
 import {db} from '../firebase';
-import {addDoc, collection, serverTimestamp} from 'firebase/firestore';
+import {addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where} from 'firebase/firestore';
 import {useAuth} from '../contexts/AuthContext';
 import ExcelJS from 'exceljs';
 import {X} from '@mynaui/icons-react';
@@ -11,6 +11,12 @@ interface Pin {
     lng: number;
     names: string[];
     notes?: string;
+}
+
+interface MapDoc {
+    userId: string;
+    mapName: string;
+    pins: Pin[];
 }
 
 const center = {
@@ -37,6 +43,9 @@ const libraries: Libraries = ['places'];
 export default function Map() {
     const {user} = useAuth();
     const [pins, setPins] = useState<Pin[]>([]);
+    const [mapName, setMapName] = useState('');
+    const [savedMaps, setSavedMaps] = useState<{id: string; mapName: string}[]>([]);
+    const [selectedMapId, setSelectedMapId] = useState('');
 
     const {isLoaded, loadError} = useJsApiLoader({
         id: 'google-map-script',
@@ -45,6 +54,22 @@ export default function Map() {
             : '',
         libraries,
     });
+
+    useEffect(() => {
+        if (!user) {
+            setSavedMaps([]);
+            return;
+        }
+        const fetchMaps = async () => {
+            const q = query(collection(db, 'maps'), where('userId', '==', user.uid));
+            const snap = await getDocs(q);
+            setSavedMaps(snap.docs.map(d => {
+                const data = d.data() as MapDoc;
+                return {id: d.id, mapName: data.mapName};
+            }));
+        };
+        fetchMaps().catch(console.error);
+    }, [user]);
 
     const onLoad = useCallback(() => {
     }, []);
@@ -89,14 +114,42 @@ export default function Map() {
 
     const savePins = async () => {
         if (!user) return;
+        if (!mapName.trim()) {
+            alert('Add meg a térkép nevét!');
+            return;
+        }
         try {
-            await addDoc(collection(db, 'maps'), {
-                userId: user.uid,
-                mapName: 'My Map',
-                timestamp: serverTimestamp(),
-                pins: pins,
-            });
+            const q = query(
+                collection(db, 'maps'),
+                where('userId', '==', user.uid),
+                where('mapName', '==', mapName.trim())
+            );
+            const snap = await getDocs(q);
+            if (snap.docs.length > 0) {
+                const confirmOverwrite = window.confirm('Már létezik ilyen nevű térkép. Felülírja?');
+                if (!confirmOverwrite) return;
+                const docRef = doc(db, 'maps', snap.docs[0].id);
+                await setDoc(docRef, {
+                    userId: user.uid,
+                    mapName: mapName.trim(),
+                    timestamp: serverTimestamp(),
+                    pins,
+                });
+            } else {
+                await addDoc(collection(db, 'maps'), {
+                    userId: user.uid,
+                    mapName: mapName.trim(),
+                    timestamp: serverTimestamp(),
+                    pins,
+                });
+            }
             alert('Térkép elmentve!');
+
+            const refresh = await getDocs(query(collection(db, 'maps'), where('userId', '==', user.uid)));
+            setSavedMaps(refresh.docs.map(d => {
+                const data = d.data() as MapDoc;
+                return {id: d.id, mapName: data.mapName};
+            }));
         } catch (error) {
             console.error('Error saving map:', error);
             alert('Hiba történt a térkép mentésekor. Próbáld újra később.');
@@ -165,6 +218,22 @@ export default function Map() {
         URL.revokeObjectURL(url);
     };
 
+    const loadMap = async (id: string) => {
+        if (!user || !id) return;
+        setSelectedMapId(id);
+        try {
+            const snap = await getDoc(doc(db, 'maps', id));
+            if (snap.exists()) {
+                const data = snap.data() as MapDoc;
+                setPins(data.pins || []);
+                setMapName(data.mapName || '');
+            }
+        } catch (error) {
+            console.error('Error loading map:', error);
+            alert('Hiba történt a térkép betöltésekor.');
+        }
+    };
+
     if (loadError) return <div>Hiba a betöltéskor</div>;
     if (!isLoaded)
         return (
@@ -203,11 +272,18 @@ export default function Map() {
                 className="flex-[1] flex flex-col p-4 gap-4 h-full overflow-hidden bg-gray-50 border-l border-gray-200">
                 {user && (
                     <div className="flex flex-col gap-2">
+                        <input
+                            type="text"
+                            value={mapName}
+                            onChange={(e) => setMapName(e.target.value)}
+                            placeholder="Térkép neve"
+                            className="border rounded p-2"
+                        />
                         <button
                             className="px-4 py-2 bg-blue-600 text-white rounded"
                             onClick={savePins}
                         >
-                            Térkép mentése db-be
+                            Térkép mentése
                         </button>
                         <button
                             className="px-4 py-2 bg-blue-600 text-white rounded"
@@ -215,6 +291,20 @@ export default function Map() {
                         >
                             Exportálás Excelbe
                         </button>
+                        {savedMaps.length > 0 && (
+                            <select
+                                value={selectedMapId}
+                                onChange={(e) => loadMap(e.target.value)}
+                                className="border rounded p-2"
+                            >
+                                <option value="">Térkép betöltése...</option>
+                                {savedMaps.map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                        {m.mapName}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
                     </div>
                 )}
 
