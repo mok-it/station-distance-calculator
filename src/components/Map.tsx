@@ -4,6 +4,7 @@ import { Button, Box, CircularProgress, TextField } from '@mui/material';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
+import ExcelJS from 'exceljs';
 
 interface Pin {
   lat: number;
@@ -98,7 +99,7 @@ export default function Map() {
     lat2: number,
     lng2: number
   ) => {
-    const R = 6371; // km
+    const R = 6_371_000; // m
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLng = ((lng2 - lng1) * Math.PI) / 180;
     const a =
@@ -111,37 +112,40 @@ export default function Map() {
     return R * c;
   };
 
-  const exportDistances = () => {
+  const exportDistances = async () => {
     const points: { name: string; lat: number; lng: number }[] = [];
     pins.forEach((pin) =>
-      pin.names.forEach((n) => points.push({ name: n, lat: pin.lat, lng: pin.lng }))
+        pin.names.forEach((n) => points.push({ name: n, lat: pin.lat, lng: pin.lng }))
     );
-    const rows = ['from,to,distance_km'];
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Distances');
+
+    worksheet.addRow(['frombetu', 'tobetu', 'distance(m)']);
+
     for (let i = 0; i < points.length; i++) {
       for (let j = i + 1; j < points.length; j++) {
-        const dist = getDistance(
-          points[i].lat,
-          points[i].lng,
-          points[j].lat,
-          points[j].lng
-        );
-        rows.push(
-          `${points[i].name},${points[j].name},${dist.toFixed(2)}`
-        );
+        const dist = getDistance(points[i].lat, points[i].lng, points[j].lat, points[j].lng);
+        worksheet.addRow([
+          points[i].name,
+          points[j].name,
+          Number(dist.toFixed(2)),
+        ]);
       }
     }
-    const csv = rows.join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'distances.csv';
+    link.download = 'distances.xlsx';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
-
   const updatePinNames = (index: number, value: string) => {
     const updated = [...pins];
     updated[index].names = value
@@ -199,7 +203,7 @@ export default function Map() {
             Save Map
           </Button>
           <Button variant="contained" onClick={exportDistances}>
-            Export CSV
+            Export to .XLSX
           </Button>
         </Box>
       )}
