@@ -44,7 +44,7 @@ export default function Map() {
     const {user} = useAuth();
     const [pins, setPins] = useState<Pin[]>([]);
     const [mapName, setMapName] = useState('');
-    const [savedMaps, setSavedMaps] = useState<{id: string; mapName: string}[]>([]);
+    const [savedMaps, setSavedMaps] = useState<{ id: string; mapName: string }[]>([]);
     const [selectedMapId, setSelectedMapId] = useState('');
 
     const {isLoaded, loadError} = useJsApiLoader({
@@ -83,7 +83,7 @@ export default function Map() {
             lng: e.latLng.lng(),
             names: [''],
         };
-        setPins((prev) => [...prev, newPin]);
+        setPins((prev) => [newPin, ...prev]);
     };
 
     const updateSingleName = (
@@ -126,7 +126,7 @@ export default function Map() {
             );
             const snap = await getDocs(q);
             if (snap.docs.length > 0) {
-                const confirmOverwrite = window.confirm('Már létezik ilyen nevű térkép. Felülírja?');
+                const confirmOverwrite = window.confirm('Már létezik ilyen nevű térkép. Felülírod?');
                 if (!confirmOverwrite) return;
                 const docRef = doc(db, 'maps', snap.docs[0].id);
                 await setDoc(docRef, {
@@ -143,7 +143,9 @@ export default function Map() {
                     pins,
                 });
             }
-            alert('Térkép elmentve!');
+
+            setPins([]);
+            setMapName('');
 
             const refresh = await getDocs(query(collection(db, 'maps'), where('userId', '==', user.uid)));
             setSavedMaps(refresh.docs.map(d => {
@@ -269,7 +271,7 @@ export default function Map() {
             </div>
 
             <div
-                className="flex-[1] flex flex-col p-4 gap-4 h-full overflow-hidden bg-gray-50 border-l border-gray-200">
+                className="flex-[1] flex flex-col p-4 pt-0 gap-4 h-full overflow-hidden bg-gray-50 border-l border-gray-200">
                 {user && (
                     <div className="flex flex-col gap-2">
                         <input
@@ -280,35 +282,43 @@ export default function Map() {
                             className="border rounded p-2"
                         />
                         <button
-                            className="px-4 py-2 bg-blue-600 text-white rounded"
+                            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={savePins}
+                            disabled={pins.length === 0 || !mapName.trim()}
                         >
                             Térkép mentése
                         </button>
                         <button
-                            className="px-4 py-2 bg-blue-600 text-white rounded"
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded"
                             onClick={exportDistances}
                         >
                             Exportálás Excelbe
                         </button>
                         {savedMaps.length > 0 && (
-                            <select
-                                value={selectedMapId}
-                                onChange={(e) => loadMap(e.target.value)}
-                                className="border rounded p-2"
-                            >
-                                <option value="">Térkép betöltése...</option>
-                                {savedMaps.map((m) => (
-                                    <option key={m.id} value={m.id}>
-                                        {m.mapName}
-                                    </option>
-                                ))}
-                            </select>
+                            <>
+                                <label>Betöltendő térkép:</label>
+                                <select
+                                    value={selectedMapId}
+                                    onChange={(e) => loadMap(e.target.value)}
+                                    className="border rounded p-2"
+                                >
+                                    {savedMaps.map((m) => (
+                                        <option key={m.id} value={m.id}>
+                                            {m.mapName}
+                                        </option>
+                                    ))}
+                                </select></>
                         )}
                     </div>
                 )}
 
                 <div className="flex-1 overflow-y-auto pr-1">
+                    <button
+                        className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded"
+                        onClick={() => {
+                            setPins([])
+                        }}>Állomások törlése
+                    </button>
                     {pins.length === 0 ? (
                             <div className="text-gray-500 text-center mt-4">
                                 Nincsenek állomások. Kattints a térképre egy új állomás hozzáadásához.
