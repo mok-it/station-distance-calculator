@@ -1,5 +1,5 @@
-import {Trash, X} from '@mynaui/icons-react';
-import {GoogleMap, Libraries, Marker, useJsApiLoader,} from '@react-google-maps/api';
+import { Trash, X} from '@mynaui/icons-react';
+import {GoogleMap, Libraries, Marker, useJsApiLoader} from '@react-google-maps/api';
 import ExcelJS from 'exceljs';
 import {addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where} from 'firebase/firestore';
 import {useCallback, useEffect, useRef, useState} from 'react';
@@ -48,6 +48,8 @@ export default function Map() {
     const [selectedMapId, setSelectedMapId] = useState('');
     const scrollRef = useRef<HTMLDivElement | null>(null);
 
+    const mapRef = useRef<google.maps.Map | null>(null);
+
     const {isLoaded, loadError} = useJsApiLoader({
         id: 'google-map-script',
         googleMapsApiKey: import.meta.env.PROD
@@ -72,9 +74,12 @@ export default function Map() {
         fetchMaps().catch(console.error);
     }, [user]);
 
-    const onLoad = useCallback(() => {
+    const onLoad = useCallback((map: google.maps.Map) => {
+        mapRef.current = map;
     }, []);
+
     const onUnmount = useCallback(() => {
+        mapRef.current = null;
     }, []);
 
     const handleMapClick = (e: google.maps.MapMouseEvent) => {
@@ -164,6 +169,17 @@ export default function Map() {
             console.error('Error saving map:', error);
             alert('Hiba történt a térkép mentésekor. Próbáld újra később.');
         }
+    };
+
+    const goToPin = (pin: Pin) => {
+        const map = mapRef.current;
+
+        if (!map) {
+            console.error('Google Map instance not loaded.');
+            return;
+        }
+
+        map.setCenter({ lat: pin.lat, lng: pin.lng });
     };
 
     const getDistance = (
@@ -257,7 +273,7 @@ export default function Map() {
                     mapContainerStyle={{width: '100%', height: '100%'}}
                     center={center}
                     zoom={10}
-                    onLoad={onLoad}
+                    onLoad={onLoad} // Use the modified onLoad to capture the map instance
                     onUnmount={onUnmount}
                     onClick={handleMapClick}
                     options={defaultOptions}
@@ -338,6 +354,13 @@ export default function Map() {
                                 data-pin={pinIndex}
                                 className="relative mt-4 border rounded p-3 bg-white shadow"
                             >
+                                <label
+                                    className="text-sm font-semibold text-gray-700 hover:text-blue-600 mb-2 block cursor-pointer"
+                                    onClick={() => goToPin(pin)} // The onClick handler triggers map centering
+                                >
+                                    {pinIndex + 1}. állomás:
+                                </label>
+
                                 <button
                                     onClick={() => removePin(pinIndex)}
                                     className="absolute top-1 right-1 text-gray-500 hover:text-red-600"
@@ -345,9 +368,7 @@ export default function Map() {
                                 >
                                     <Trash className="w-4 h-4 m-2"/>
                                 </button>
-                                <label className="text-sm font-semibold text-gray-700 mb-2 block">
-                                    {pinIndex + 1}. állomás nevei:
-                                </label>
+
                                 <div className="flex flex-col gap-1">
                                     {pin.names.map((name, nameIndex) => (
                                         <div key={nameIndex} className="flex gap-2 items-center">

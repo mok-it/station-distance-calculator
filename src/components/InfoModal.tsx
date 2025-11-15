@@ -77,6 +77,9 @@ export const InfoModal: FC<InfoModalProps> = ({ isOpen, onClose }) => {
                                         <li>
                                             <strong>Térképtűk mozgatása:</strong> A lerakott térképtűket meg lehet fogni és áthúzni egy másik helyre, ha úgy van kedvünk.
                                         </li>
+                                        <li>
+                                            <strong>Elvesztél?</strong> Nyomj rá bármelyik állomás nevére, hogy a térkép odaugorjon.
+                                        </li>
                                     </ul>
                                 </div>
 
