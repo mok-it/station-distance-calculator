@@ -1,7 +1,7 @@
 {
   "name": "norbi-allomasok-tavolsag2",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.9",
     "@mynaui/icons-react": "^0.3.8",
     "@react-google-maps/api": "^2.20.6",
     "@tailwindcss/vite": "^4.1.8",
@@ -35,6 +36,6 @@
     "tailwindcss-cli": "^0.1.2",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.24.1",
-    "vite": "^6.2.0"
+    "vite": "7.2.2"
   }
 }

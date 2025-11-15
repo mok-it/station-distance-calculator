@@ -1,10 +1,10 @@
-import {useCallback, useEffect, useState} from 'react';
+import {Trash, X} from '@mynaui/icons-react';
 import {GoogleMap, Libraries, Marker, useJsApiLoader,} from '@react-google-maps/api';
-import {db} from '../firebase';
-import {addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where} from 'firebase/firestore';
-import {useAuth} from '../contexts/AuthContext';
 import ExcelJS from 'exceljs';
-import {X} from '@mynaui/icons-react';
+import {addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where} from 'firebase/firestore';
+import {useCallback, useEffect, useRef, useState} from 'react';
+import {useAuth} from '../contexts/AuthContext';
+import {db} from '../firebase';
 
 interface Pin {
     lat: number;
@@ -46,6 +46,7 @@ export default function Map() {
     const [mapName, setMapName] = useState('');
     const [savedMaps, setSavedMaps] = useState<{ id: string; mapName: string }[]>([]);
     const [selectedMapId, setSelectedMapId] = useState('');
+    const scrollRef = useRef<HTMLDivElement | null>(null);
 
     const {isLoaded, loadError} = useJsApiLoader({
         id: 'google-map-script',
@@ -83,7 +84,14 @@ export default function Map() {
             lng: e.latLng.lng(),
             names: [''],
         };
-        setPins((prev) => [newPin, ...prev]);
+
+        setPins((prev) => [...prev, newPin]);
+        console.log({scrollRef})
+
+        scrollRef.current?.scrollTo({
+            top: scrollRef.current.scrollHeight,
+            behavior: 'smooth',
+        });
     };
 
     const updateSingleName = (
@@ -312,7 +320,7 @@ export default function Map() {
                     </div>
                 )}
 
-                <div className="flex-1 overflow-y-auto pr-1">
+                <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1">
                     <button
                         className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded"
                         onClick={() => {
@@ -335,9 +343,9 @@ export default function Map() {
                                     className="absolute top-1 right-1 text-gray-500 hover:text-red-600"
                                     aria-label="Remove"
                                 >
-                                    <X className="w-4 h-4"/>
+                                    <Trash className="w-4 h-4 m-2"/>
                                 </button>
-                                <label className="text-sm font-semibold text-gray-700 mb-1 block">
+                                <label className="text-sm font-semibold text-gray-700 mb-2 block">
                                     {pinIndex + 1}. állomás nevei:
                                 </label>
                                 <div className="flex flex-col gap-1">
