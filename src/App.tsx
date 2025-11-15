@@ -29,7 +29,7 @@ function AppContent() {
                     </button>
                 </div>
                 {user ? (
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500" onClick={signOut}>
+                    <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500" onClick={() => {if(confirm('Biztosan ki szeretnél jelentkezni?')) signOut();}}>
                         Kijelentkezés
                     </button>
                 ) : (

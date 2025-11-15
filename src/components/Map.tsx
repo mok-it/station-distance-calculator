@@ -99,6 +99,21 @@ export default function Map() {
         });
     };
 
+    const handleMarkerDragEnd = (index: number, e: google.maps.MapMouseEvent) => {
+        if (!e.latLng) return;
+        const newLat = e.latLng.lat();
+        const newLng = e.latLng.lng();
+        setPins((prev) => {
+            const updated = [...prev];
+            updated[index] = {
+                ...updated[index],
+                lat: newLat,
+                lng: newLng,
+            };
+            return updated;
+        });
+    };
+
     const updateSingleName = (
         pinIndex: number,
         nameIndex: number,
@@ -282,6 +297,8 @@ export default function Map() {
                         <Marker
                             key={index}
                             position={{lat: pin.lat, lng: pin.lng}}
+                            draggable
+                            onDragEnd={(e) => handleMarkerDragEnd(index, e)}
                             label={
                                 pin.names.join(', ') || ''
                             }
