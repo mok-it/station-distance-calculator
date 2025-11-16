@@ -126,7 +126,6 @@ export default function Map() {
         });
     };
 
-    // --- New Function: Create a new, empty map session ---
     const createNewMap = () => {
         const newName = window.prompt('Add meg az új térkép nevét:', 'Új Térkép');
         if (!newName || !newName.trim()) {
@@ -139,7 +138,6 @@ export default function Map() {
         setSelectedMapId(''); // Deselect saved map
     };
 
-    // --- Refactored Save/Update Function ---
     const saveCurrentMap = async () => {
         if (!user) return;
         if (!mapName.trim()) {
@@ -155,7 +153,7 @@ export default function Map() {
                     mapName: mapName.trim(),
                     pins,
                 });
-                alert('Térkép sikeresen frissítve!');
+                alert('Módosítások mentve!');
             } else {
                 // Scenario 2: Save new map
                 const q = query(
@@ -197,7 +195,6 @@ export default function Map() {
         }
     };
 
-    // --- New Function: Rename current map ---
     const renameCurrentMap = async () => {
         if (!user || !currentMapId) {
             alert('Nincs betöltve térkép az átnevezéshez.');
@@ -213,7 +210,6 @@ export default function Map() {
 
                 // Refresh saved maps list
                 setSavedMaps(await fetchSavedMaps(user.uid));
-                alert('Térkép sikeresen átnevezve!');
             } catch (error) {
                 console.error('Error renaming map:', error);
                 alert('Hiba történt az átnevezéskor.');
@@ -221,7 +217,6 @@ export default function Map() {
         }
     };
 
-    // --- New Function: Delete selected map ---
     const deleteMap = async () => {
         if (!user || !selectedMapId) {
             alert('Válassz ki egy térképet a törléshez.');
@@ -246,7 +241,6 @@ export default function Map() {
                 const refreshedMaps = await fetchSavedMaps(user.uid);
                 setSavedMaps(refreshedMaps);
                 setSelectedMapId(refreshedMaps.length > 0 ? refreshedMaps[0].id : '');
-                alert('Térkép sikeresen törölve.');
             } catch (error) {
                 console.error('Error deleting map:', error);
                 alert('Hiba történt a térkép törlésekor.');
@@ -431,23 +425,16 @@ export default function Map() {
                 {user && (
                     <div className="flex flex-col gap-3">
                         {/* Current Map Name and Status */}
-                        <div className="flex flex-col gap-1">
-                            <h2 className="text-xl font-bold text-gray-800">
-                                {mapName}
-                            </h2>
-                            <span className={`text-sm ${currentMapId ? 'text-green-600' : 'text-yellow-600'}`}>
-                                {currentMapId ? 'Betöltött/Mentett térkép' : 'Új térkép (Mentetlen)'}
-                             </span>
-                        </div>
 
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                value={mapName}
-                                onChange={(e) => setMapName(e.target.value)}
-                                placeholder="Térkép neve"
-                                className="border rounded p-2 flex-grow"
-                            />
+                        <div className='flex flex-row items-center justify-between'>
+                            <div className="flex flex-col gap-1">
+                                <h2 className="text-xl font-bold text-gray-800">
+                                    {mapName}
+                                </h2>
+                                <span className={`text-sm ${currentMapId ? 'text-green-600' : 'text-yellow-600'}`}>
+                                {currentMapId ? 'Betöltött/Mentett térkép' : 'Új térkép (Nincs mentve)'}
+                             </span>
+                            </div>
                             {currentMapId && (
                                 <button
                                     className="px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-400"
@@ -459,14 +446,27 @@ export default function Map() {
                             )}
                         </div>
 
+                        <div className="flex gap-2">
+                            {/*<label*/}
+                            {/*    // type="text"*/}
+                            {/*    // value={mapName}*/}
+                            {/*    // onChange={(e) => setMapName(e.target.value)}*/}
+                            {/*    // placeholder="Térkép neve"*/}
+                            {/*    className="rounded p-2 flex-grow"*/}
+                            {/*>*/}
+                            {/*    {mapName}*/}
+                            {/*</label>*/}
+
+                        </div>
+
                         {/* Action Buttons */}
                         <div className="grid grid-cols-2 gap-2">
                             <button
-                                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex col-span-2 items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                 onClick={saveCurrentMap}
                                 disabled={pins.length === 0 || !mapName.trim()}
                             >
-                                <Save className="w-5 h-5"/> {currentMapId ? 'Frissítés' : 'Mentés'}
+                                <Save className="w-5 h-5"/> {currentMapId ? 'Módosítások mentése' : 'Mentés'}
                             </button>
                             <button
                                 className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded"
