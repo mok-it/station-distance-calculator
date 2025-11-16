@@ -1,9 +1,20 @@
-import { Trash, X} from '@mynaui/icons-react';
+import { File, Edit, Plus, Save, Trash, X, Zap} from '@mynaui/icons-react';
 import {GoogleMap, Libraries, Marker, useJsApiLoader} from '@react-google-maps/api';
 import ExcelJS from 'exceljs';
-import {addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where} from 'firebase/firestore';
+import {
+    addDoc,
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    query,
+    serverTimestamp,
+    updateDoc,
+    where
+} from 'firebase/firestore';
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {useAuth} from '../contexts/AuthContext';
+import {useAuth} from '../contexts/AuthContext.tsx';
 import {db} from '../firebase';
 
 interface Pin {
@@ -40,14 +51,31 @@ const defaultOptions = {
 
 const libraries: Libraries = ['places'];
 
+// Helper function to refresh the list of saved maps
+const fetchSavedMaps = async (userId: string) => {
+    const q = query(collection(db, 'maps'), where('userId', '==', userId));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => {
+        const data = d.data() as MapDoc;
+        return {id: d.id, mapName: data.mapName};
+    });
+};
+
 export default function Map() {
     const {user} = useAuth();
     const [pins, setPins] = useState<Pin[]>([]);
-    const [mapName, setMapName] = useState('');
+    // Track the name of the map being edited
+    const [mapName, setMapName] = useState('Új Térkép');
+    // Track the ID of the map being edited (null if new)
+    const [currentMapId, setCurrentMapId] = useState<string | null>(null);
     const [savedMaps, setSavedMaps] = useState<{ id: string; mapName: string }[]>([]);
+    // This is used to select the map in the dropdown to load/delete
     const [selectedMapId, setSelectedMapId] = useState('');
+
+    // Fix scrollRef initialization
     const scrollRef = useRef<HTMLDivElement | null>(null);
 
+    // Ref to store the Google Map instance
     const mapRef = useRef<google.maps.Map | null>(null);
 
     const {isLoaded, loadError} = useJsApiLoader({
@@ -58,22 +86,22 @@ export default function Map() {
         libraries,
     });
 
+    // Initial fetch of saved maps list
     useEffect(() => {
         if (!user) {
             setSavedMaps([]);
             return;
         }
-        const fetchMaps = async () => {
-            const q = query(collection(db, 'maps'), where('userId', '==', user.uid));
-            const snap = await getDocs(q);
-            setSavedMaps(snap.docs.map(d => {
-                const data = d.data() as MapDoc;
-                return {id: d.id, mapName: data.mapName};
-            }));
-        };
-        fetchMaps().catch(console.error);
+        fetchSavedMaps(user.uid).then(maps => {
+            setSavedMaps(maps);
+            // Default select the first map if available
+            if (maps.length > 0) {
+                setSelectedMapId(maps[0].id);
+            }
+        }).catch(console.error);
     }, [user]);
 
+    // 2. Capture the map instance when it loads
     const onLoad = useCallback((map: google.maps.Map) => {
         mapRef.current = map;
     }, []);
@@ -91,7 +119,6 @@ export default function Map() {
         };
 
         setPins((prev) => [...prev, newPin]);
-        console.log({scrollRef})
 
         scrollRef.current?.scrollTo({
             top: scrollRef.current.scrollHeight,
@@ -99,20 +126,150 @@ export default function Map() {
         });
     };
 
-    const handleMarkerDragEnd = (index: number, e: google.maps.MapMouseEvent) => {
-        if (!e.latLng) return;
-        const newLat = e.latLng.lat();
-        const newLng = e.latLng.lng();
-        setPins((prev) => {
-            const updated = [...prev];
-            updated[index] = {
-                ...updated[index],
-                lat: newLat,
-                lng: newLng,
-            };
-            return updated;
-        });
+    // --- New Function: Create a new, empty map session ---
+    const createNewMap = () => {
+        const newName = window.prompt('Add meg az új térkép nevét:', 'Új Térkép');
+        if (!newName || !newName.trim()) {
+            return;
+        }
+
+        setPins([]);
+        setMapName(newName.trim());
+        setCurrentMapId(null);
+        setSelectedMapId(''); // Deselect saved map
     };
+
+    // --- Refactored Save/Update Function ---
+    const saveCurrentMap = async () => {
+        if (!user) return;
+        if (!mapName.trim()) {
+            alert('Add meg a térkép nevét!');
+            return;
+        }
+
+        try {
+            if (currentMapId) {
+                // Scenario 1: Update existing map
+                const docRef = doc(db, 'maps', currentMapId);
+                await updateDoc(docRef, {
+                    mapName: mapName.trim(),
+                    pins,
+                });
+                alert('Térkép sikeresen frissítve!');
+            } else {
+                // Scenario 2: Save new map
+                const q = query(
+                    collection(db, 'maps'),
+                    where('userId', '==', user.uid),
+                    where('mapName', '==', mapName.trim())
+                );
+                const snap = await getDocs(q);
+                if (snap.docs.length > 0) {
+                    alert('Már létezik ilyen nevű térkép. Használj egyedi nevet, vagy nevezd át előbb!');
+                    return;
+                }
+
+                const newDocRef = await addDoc(collection(db, 'maps'), {
+                    userId: user.uid,
+                    mapName: mapName.trim(),
+                    timestamp: serverTimestamp(),
+                    pins,
+                });
+
+                setCurrentMapId(newDocRef.id);
+                alert('Térkép sikeresen elmentve!');
+            }
+
+            // Refresh the saved maps list
+            const refreshedMaps = await fetchSavedMaps(user.uid);
+            setSavedMaps(refreshedMaps);
+
+            // Set the newly saved/updated map as selected
+            const newId = currentMapId || refreshedMaps.find(m => m.mapName === mapName.trim())?.id;
+            if (newId) {
+                setSelectedMapId(newId);
+                setCurrentMapId(newId);
+            }
+
+        } catch (error) {
+            console.error('Error saving map:', error);
+            alert('Hiba történt a térkép mentésekor. Próbáld újra később.');
+        }
+    };
+
+    // --- New Function: Rename current map ---
+    const renameCurrentMap = async () => {
+        if (!user || !currentMapId) {
+            alert('Nincs betöltve térkép az átnevezéshez.');
+            return;
+        }
+        const newName = window.prompt('Írd be az új nevet:', mapName);
+
+        if (newName && newName.trim() && newName.trim() !== mapName) {
+            try {
+                const docRef = doc(db, 'maps', currentMapId);
+                await updateDoc(docRef, {mapName: newName.trim()});
+                setMapName(newName.trim());
+
+                // Refresh saved maps list
+                setSavedMaps(await fetchSavedMaps(user.uid));
+                alert('Térkép sikeresen átnevezve!');
+            } catch (error) {
+                console.error('Error renaming map:', error);
+                alert('Hiba történt az átnevezéskor.');
+            }
+        }
+    };
+
+    // --- New Function: Delete selected map ---
+    const deleteMap = async () => {
+        if (!user || !selectedMapId) {
+            alert('Válassz ki egy térképet a törléshez.');
+            return;
+        }
+
+        const mapToDelete = savedMaps.find(m => m.id === selectedMapId)?.mapName || 'ezt a térképet';
+        const confirmDelete = window.confirm(`Biztosan törölni szeretnéd a(z) "${mapToDelete}" térképet?`);
+
+        if (confirmDelete) {
+            try {
+                await deleteDoc(doc(db, 'maps', selectedMapId));
+
+                // Reset state if we deleted the currently loaded map
+                if (currentMapId === selectedMapId) {
+                    setPins([]);
+                    setMapName('Új Térkép');
+                    setCurrentMapId(null);
+                }
+
+                // Refresh saved maps list
+                const refreshedMaps = await fetchSavedMaps(user.uid);
+                setSavedMaps(refreshedMaps);
+                setSelectedMapId(refreshedMaps.length > 0 ? refreshedMaps[0].id : '');
+                alert('Térkép sikeresen törölve.');
+            } catch (error) {
+                console.error('Error deleting map:', error);
+                alert('Hiba történt a térkép törlésekor.');
+            }
+        }
+    };
+
+
+    const handleMarkerDragEnd = useCallback((index: number, e: google.maps.MapMouseEvent) => {
+        setPins(prevPins => {
+            const updatedPins = [...prevPins];
+            // Update the latitude and longitude for the pin at the given index
+            if (e.latLng) {
+                updatedPins[index] = {
+                    ...updatedPins[index],
+                    lat: e.latLng.lat(),
+                    lng: e.latLng.lng(),
+                };
+            }
+
+            return updatedPins;
+        });
+    }, []);
 
     const updateSingleName = (
         pinIndex: number,
@@ -140,53 +297,8 @@ export default function Map() {
         setPins((prev) => prev.filter((_, i) => i !== pinIndex));
     };
 
-    const savePins = async () => {
-        if (!user) return;
-        if (!mapName.trim()) {
-            alert('Add meg a térkép nevét!');
-            return;
-        }
-        try {
-            const q = query(
-                collection(db, 'maps'),
-                where('userId', '==', user.uid),
-                where('mapName', '==', mapName.trim())
-            );
-            const snap = await getDocs(q);
-            if (snap.docs.length > 0) {
-                const confirmOverwrite = window.confirm('Már létezik ilyen nevű térkép. Felülírod?');
-                if (!confirmOverwrite) return;
-                const docRef = doc(db, 'maps', snap.docs[0].id);
-                await setDoc(docRef, {
-                    userId: user.uid,
-                    mapName: mapName.trim(),
-                    timestamp: serverTimestamp(),
-                    pins,
-                });
-            } else {
-                await addDoc(collection(db, 'maps'), {
-                    userId: user.uid,
-                    mapName: mapName.trim(),
-                    timestamp: serverTimestamp(),
-                    pins,
-                });
-            }
-
-            setPins([]);
-            setMapName('');
-
-            const refresh = await getDocs(query(collection(db, 'maps'), where('userId', '==', user.uid)));
-            setSavedMaps(refresh.docs.map(d => {
-                const data = d.data() as MapDoc;
-                return {id: d.id, mapName: data.mapName};
-            }));
-        } catch (error) {
-            console.error('Error saving map:', error);
-            alert('Hiba történt a térkép mentésekor. Próbáld újra később.');
-        }
-    };
-
-    const goToPin = (pin: Pin) => {
+    const goToPin = (pinIndex: number) => {
+        const pin = pins[pinIndex];
         const map = mapRef.current;
 
         if (!map) {
@@ -194,7 +306,7 @@ export default function Map() {
             return;
         }
 
-        map.setCenter({ lat: pin.lat, lng: pin.lng });
+        map.setCenter({lat: pin.lat, lng: pin.lng});
     };
 
     const getDistance = (
@@ -262,12 +374,15 @@ export default function Map() {
     const loadMap = async (id: string) => {
         if (!user || !id) return;
         setSelectedMapId(id);
+
         try {
             const snap = await getDoc(doc(db, 'maps', id));
             if (snap.exists()) {
                 const data = snap.data() as MapDoc;
                 setPins(data.pins || []);
                 setMapName(data.mapName || '');
+                // Set the current ID being edited
+                setCurrentMapId(id);
             }
         } catch (error) {
             console.error('Error loading map:', error);
@@ -288,7 +403,7 @@ export default function Map() {
                     mapContainerStyle={{width: '100%', height: '100%'}}
                     center={center}
                     zoom={10}
-                    onLoad={onLoad} // Use the modified onLoad to capture the map instance
+                    onLoad={onLoad}
                     onUnmount={onUnmount}
                     onClick={handleMapClick}
                     options={defaultOptions}
@@ -297,8 +412,6 @@ export default function Map() {
                         <Marker
                             key={index}
                             position={{lat: pin.lat, lng: pin.lng}}
-                            draggable
-                            onDragEnd={(e) => handleMarkerDragEnd(index, e)}
                             label={
                                 pin.names.join(', ') || ''
                             }
@@ -306,6 +419,8 @@ export default function Map() {
                                 url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png',
                                 labelOrigin: new google.maps.Point(16, -16), // move label upward
                             }}
+                            draggable={true}
+                            onDragEnd={(e) => handleMarkerDragEnd(index, e)}
                         />
                     ))}
                 </GoogleMap>
@@ -314,51 +429,106 @@ export default function Map() {
             <div
                 className="flex-[1] flex flex-col p-4 pt-0 gap-4 h-full overflow-hidden bg-gray-50 border-l border-gray-200">
                 {user && (
-                    <div className="flex flex-col gap-2">
-                        <input
-                            type="text"
-                            value={mapName}
-                            onChange={(e) => setMapName(e.target.value)}
-                            placeholder="Térkép neve"
-                            className="border rounded p-2"
-                        />
-                        <button
-                            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                            onClick={savePins}
-                            disabled={pins.length === 0 || !mapName.trim()}
-                        >
-                            Térkép mentése
-                        </button>
-                        <button
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded"
-                            onClick={exportDistances}
-                        >
-                            Exportálás Excelbe
-                        </button>
-                        {savedMaps.length > 0 && (
-                            <>
-                                <label>Betöltendő térkép:</label>
-                                <select
-                                    value={selectedMapId}
-                                    onChange={(e) => loadMap(e.target.value)}
-                                    className="border rounded p-2"
+                    <div className="flex flex-col gap-3">
+                        {/* Current Map Name and Status */}
+                        <div className="flex flex-col gap-1">
+                            <h2 className="text-xl font-bold text-gray-800">
+                                {mapName}
+                            </h2>
+                            <span className={`text-sm ${currentMapId ? 'text-green-600' : 'text-yellow-600'}`}>
+                                {currentMapId ? 'Betöltött/Mentett térkép' : 'Új térkép (Mentetlen)'}
+                             </span>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={mapName}
+                                onChange={(e) => setMapName(e.target.value)}
+                                placeholder="Térkép neve"
+                                className="border rounded p-2 flex-grow"
+                            />
+                            {currentMapId && (
+                                <button
+                                    className="px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-400"
+                                    onClick={renameCurrentMap}
+                                    title="Térkép átnevezése"
                                 >
-                                    {savedMaps.map((m) => (
-                                        <option key={m.id} value={m.id}>
-                                            {m.mapName}
-                                        </option>
-                                    ))}
-                                </select></>
+                                    <Edit className="w-5 h-5"/>
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={saveCurrentMap}
+                                disabled={pins.length === 0 || !mapName.trim()}
+                            >
+                                <Save className="w-5 h-5"/> {currentMapId ? 'Frissítés' : 'Mentés'}
+                            </button>
+                            <button
+                                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded"
+                                onClick={createNewMap}
+                            >
+                                <Plus className="w-5 h-5"/> Új Térkép
+                            </button>
+                            <button
+                                className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded disabled:opacity-50 disabled:hover:bg-indigo-600"
+                                onClick={exportDistances}
+                                disabled={pins.length < 2}
+                            >
+                                <Zap className="w-5 h-5"/> Exportálás
+                            </button>
+                        </div>
+
+                        {/* Load/Delete Workflow */}
+                        {savedMaps.length > 0 && (
+                            <div className="flex flex-col gap-2 border-t pt-3 mt-3">
+                                <label className="text-sm font-semibold text-gray-700">Térkép betöltése/törlése:</label>
+                                <div className="flex gap-2">
+                                    <select
+                                        value={selectedMapId}
+                                        onChange={(e) => setSelectedMapId(e.target.value)}
+                                        className="border rounded p-2 w-12 flex-grow"
+                                    >
+                                        {savedMaps.map((m) => (
+                                            <option key={m.id} value={m.id}>
+                                                {m.mapName}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        className="px-3 py-2 bg-gray-500 text-white rounded hover:bg-gray-400"
+                                        onClick={() => loadMap(selectedMapId)}
+                                        disabled={!selectedMapId}
+                                        title="Betöltés"
+                                    >
+                                        <File className="w-5 h-5"/>
+                                    </button>
+                                    <button
+                                        className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-500"
+                                        onClick={deleteMap}
+                                        disabled={!selectedMapId}
+                                        title="Törlés"
+                                    >
+                                        <Trash className="w-5 h-5"/>
+                                    </button>
+                                </div>
+                            </div>
                         )}
                     </div>
                 )}
 
-                <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1">
+                <div ref={scrollRef} className="flex-1 overflow-y-auto mt-4">
                     <button
-                        className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded"
+                        className="p-2 w-full bg-red-600 hover:bg-red-500 text-white rounded mb-4 disabled:opacity-50 disabled:hover:bg-red-600"
+                        disabled={pins.length === 0}
                         onClick={() => {
-                            setPins([])
-                        }}>Állomások törlése
+                            if (confirm("Biztos, hogy az összes állomást törölni szeretnéd a térképről?"))
+                                setPins([])
+                        }}>Összes Állomás Törlése a Térképről
                     </button>
                     {pins.length === 0 ? (
                             <div className="text-gray-500 text-center mt-4">
@@ -373,9 +543,9 @@ export default function Map() {
                             >
                                 <label
                                     className="text-sm font-semibold text-gray-700 hover:text-blue-600 mb-2 block cursor-pointer"
-                                    onClick={() => goToPin(pin)} // The onClick handler triggers map centering
+                                    onClick={() => goToPin(pinIndex)} // The onClick handler triggers map centering
                                 >
-                                    {pinIndex + 1}. állomás:
+                                    {pinIndex + 1}. állomás nevei:
                                 </label>
 
                                 <button
